@@ -1,26 +1,23 @@
 FROM node:22-bookworm AS build
 
-ARG ORCA_VERSION=2.3.1
-ARG TARGETARCH
+ARG ORCA_RELEASE=https://github.com/OrcaSlicer/OrcaSlicer/releases/download/v2.3.2/OrcaSlicer_Linux_AppImage_Ubuntu2404_V2.3.2.AppImage
+ARG BAMBU_RELEASE=https://github.com/bambulab/BambuStudio/releases/download/v02.07.01.57/BambuStudio_ubuntu-24.04-v02.07.01.57-20260601192128.AppImage
 
 WORKDIR /app
 
-# Download OrcaSlicer based on architecture
-# AMD64: Use official AppImage from SoftFever/OrcaSlicer
-# ARM64: Use custom-built AppImage from kldzj/orca-slicer-arm64
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-	echo "Downloading ARM64 AppImage from kldzj/orca-slicer-arm64..."; \
-	curl -o orca.AppImage -L "https://github.com/kldzj/orca-slicer-arm64/releases/download/v${ORCA_VERSION}-arm64/OrcaSlicer-${ORCA_VERSION}-arm64-linux.AppImage"; \
-	chmod +x orca.AppImage; \
-	./orca.AppImage --appimage-extract; \
-	rm orca.AppImage; \
-	else \
-	echo "Downloading AMD64 AppImage from SoftFever/OrcaSlicer..."; \
-	curl -o orca.AppImage -L "https://github.com/SoftFever/OrcaSlicer/releases/download/v${ORCA_VERSION}/OrcaSlicer_Linux_AppImage_Ubuntu2404_V${ORCA_VERSION}.AppImage"; \
-	chmod +x orca.AppImage; \
-	./orca.AppImage --appimage-extract; \
-	rm orca.AppImage; \
-	fi
+# Download Orca Slicer
+RUN curl -fL -o orca.AppImage ${ORCA_RELEASE}
+RUN chmod +x orca.AppImage
+RUN ./orca.AppImage --appimage-extract
+RUN rm orca.AppImage
+RUN mv squashfs-root orca
+
+# Download Bambu Studio
+RUN curl -fL -o bambu.AppImage ${BAMBU_RELEASE}
+RUN chmod +x bambu.AppImage
+RUN ./bambu.AppImage --appimage-extract
+RUN rm bambu.AppImage
+RUN mv squashfs-root bambu
 
 COPY package*.json ./
 
@@ -49,19 +46,19 @@ RUN apt-get update \
 	&& update-ca-certificates \
 	&& rm -rf /var/lib/apt/lists/*
 
-
 COPY --from=build /app/dist/src /app/dist
 COPY --from=build /app/node_modules /app/node_modules
-COPY --from=build /app/squashfs-root /app/squashfs-root
+COPY --from=build /app/bambu /app/bambu
+COPY --from=build /app/orca /app/orca
 
 ENV PORT=3000
-ENV ORCASLICER_PATH=/app/squashfs-root/AppRun
+ENV ORCASLICER_PATH=/app/bambu/AppRun
 ENV DATA_PATH=/app/data
 ENV NODE_ENV=production
 
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-	CMD curl -f http://localhost:3000/health || exit 1
+	CMD curl -f http://localhost:30000/health || exit 1
 
 CMD ["node", "app/dist/index.js"]
